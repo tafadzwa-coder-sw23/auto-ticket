@@ -40,8 +40,8 @@ const Landing = () => {
       </header>
 
       {/* Features Section */}
-      <main id="features" className="max-w-6xl mx-auto px-6 py-20 space-y-20">
-        <section className="text-center">
+      <main className="flex-1" id="features">
+        <section className="text-center py-20 px-6">
           <h2 className="text-4xl font-semibold mb-10">Why Choose TicketScribe AI?</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
             <div className="p-8 bg-white rounded-xl shadow-lg flex flex-col items-center">
@@ -83,43 +83,43 @@ const Landing = () => {
           </blockquote>
           <cite className="block mt-4 font-semibold text-gray-900">- Jane Doe, Support Manager</cite>
         </section>
-
-        {/* Footer Section */}
-        <footer id="contact" className="bg-gray-100 py-12 text-gray-700">
-          <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div>
-              <h3 className="font-semibold text-lg mb-4">About TicketScribe AI</h3>
-              <p className="text-sm">
-                TicketScribe AI is an AI-powered ticket management and analytics platform designed to streamline support workflows and improve customer satisfaction.
-              </p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg mb-4">Quick Links</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="/" className="hover:text-blue-600 transition">Home</a></li>
-                <li><a href="#features" className="hover:text-blue-600 transition">Features</a></li>
-                <li><a href="#testimonials" className="hover:text-blue-600 transition">Testimonials</a></li>
-                <li><a href="#contact" className="hover:text-blue-600 transition">Contact</a></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg mb-4">Contact Us</h3>
-              <p className="flex items-center space-x-2 text-sm">
-                <Mail className="w-4 h-4" />
-                <span>support@ticketscribe.ai</span>
-              </p>
-              <div className="flex space-x-4 mt-4">
-                <a href="https://facebook.com" aria-label="Facebook" className="hover:text-blue-600 transition"><Facebook className="w-6 h-6" /></a>
-                <a href="https://twitter.com" aria-label="Twitter" className="hover:text-blue-600 transition"><Twitter className="w-6 h-6" /></a>
-                <a href="https://linkedin.com" aria-label="LinkedIn" className="hover:text-blue-600 transition"><Linkedin className="w-6 h-6" /></a>
-              </div>
-            </div>
-          </div>
-          <div className="mt-8 text-center text-sm text-gray-500">
-            &copy; {new Date().getFullYear()} TicketScribe AI. All rights reserved.
-          </div>
-        </footer>
       </main>
+
+      {/* Footer Section - moved outside main, styled like navbar */}
+      <footer id="contact" className="bg-white border-t shadow-md py-12 text-gray-700">
+        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div>
+            <h3 className="font-semibold text-lg mb-4">About TicketScribe AI</h3>
+            <p className="text-sm">
+              TicketScribe AI is an AI-powered ticket management and analytics platform designed to streamline support workflows and improve customer satisfaction.
+            </p>
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg mb-4">Quick Links</h3>
+            <ul className="space-y-2 text-sm">
+              <li><a href="/" className="hover:text-blue-600 transition">Home</a></li>
+              <li><a href="#features" className="hover:text-blue-600 transition">Features</a></li>
+              <li><a href="#testimonials" className="hover:text-blue-600 transition">Testimonials</a></li>
+              <li><a href="#contact" className="hover:text-blue-600 transition">Contact</a></li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg mb-4">Contact Us</h3>
+            <p className="flex items-center space-x-2 text-sm">
+              <Mail className="w-4 h-4" />
+              <span>support@ticketscribe.ai</span>
+            </p>
+            <div className="flex space-x-4 mt-4">
+              <a href="https://facebook.com" aria-label="Facebook" className="hover:text-blue-600 transition"><Facebook className="w-6 h-6" /></a>
+              <a href="https://twitter.com" aria-label="Twitter" className="hover:text-blue-600 transition"><Twitter className="w-6 h-6" /></a>
+              <a href="https://linkedin.com" aria-label="LinkedIn" className="hover:text-blue-600 transition"><Linkedin className="w-6 h-6" /></a>
+            </div>
+          </div>
+        </div>
+        <div className="mt-8 text-center text-sm text-gray-500">
+          &copy; {new Date().getFullYear()} TicketScribe AI. All rights reserved.
+        </div>
+      </footer>
     </div>
   );
 };
