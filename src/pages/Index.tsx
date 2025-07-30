@@ -10,32 +10,133 @@ import { LogIn, Mail, Lock, Users, Settings, BarChart3, Ticket, Brain, Zap, Acti
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import TicketManager from '../components/TicketManager';
 import MLMonitoring from '../components/MLMonitoring';
+import { CurrentTicketProvider, useCurrentTicket } from "../lib/CurrentTicketContext";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { supabase } from "../supabaseClient";
+import { fetchTickets, createTicket, updateTicket, deleteTicket } from "../lib/supabaseTickets";
+import { useUser } from "../lib/UserContext";
+
+// Copy the Ticket type and mockTickets from TicketManager
+export interface Ticket {
+  id: string;
+  subject: string;
+  department: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  status: 'Open' | 'In Progress' | 'Resolved' | 'Closed';
+  created: string;
+  customer: string;
+  agent?: string;
+  confidence: number;
+  isAutoClassified: boolean;
+}
 
 const Index = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<'admin' | 'agent' | 'customer' | null>(null);
-  const [credentials, setCredentials] = useState({ email: '', password: '', role: '' });
+  const { user, loading: userLoading } = useUser();
+  const [credentials, setCredentials] = useState({ email: '', password: '' });
   const { toast } = useToast();
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [onlineAgent, setOnlineAgent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Fetch tickets from Supabase after login
+  React.useEffect(() => {
+    let subscription: any;
+    if (user) {
+      const loadTickets = async () => {
+        try {
+          const data = await fetchTickets();
+          setTickets(data || []);
+        } catch (error: any) {
+          toast({ title: 'Error', description: error.message, variant: 'destructive' });
+        }
+      };
+      loadTickets();
+      // Real-time subscription
+      subscription = supabase
+        .channel('public:tickets')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, payload => {
+          loadTickets();
+        })
+        .subscribe();
+    }
+    return () => {
+      if (subscription) supabase.removeChannel(subscription);
+    };
+  }, [user, toast]);
+
+  // When agent logs in, assign all unassigned tickets to them
+  React.useEffect(() => {
+    const userRole = user?.user_metadata?.role;
+    if (userRole === 'agent' && user?.email) {
+      setOnlineAgent(user.email);
+      setTickets(prev => prev.map(t => !t.agent ? { ...t, agent: user.email } : t));
+    }
+  }, [user]);
+
+  // Helper to decode JWT and extract role
+  function parseJwt(token: string) {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      return JSON.parse(jsonPayload);
+    } catch {
+      return null;
+    }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (credentials.email && credentials.password && credentials.role) {
-      setUserRole(credentials.role as 'admin' | 'agent' | 'customer');
-      setIsLoggedIn(true);
-      toast({
-        title: "Login Successful",
-        description: `Welcome back! Redirecting to ${credentials.role} dashboard.`,
-      });
-    } else {
+    if (!credentials.email || !credentials.password) {
       toast({
         title: "Login Failed", 
         description: "Please fill in all fields.",
         variant: "destructive"
       });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password,
+      });
+      if (error) {
+        toast({
+          title: "Login Failed",
+          description: error.message,
+          variant: "destructive"
+        });
+        setLoading(false);
+        return;
+      }
+      // Get user role from user metadata (if set during sign up)
+      const user = data.user;
+      const role = user?.user_metadata?.role || 'customer';
+      setUserRole(role);
+      setIsLoggedIn(true);
+      toast({
+        title: "Login Successful",
+        description: `Welcome back! Redirecting to ${role} dashboard.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Login Failed",
+        description: "Network error. Please try again later.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!isLoggedIn) {
+  if (userLoading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+  if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
@@ -88,20 +189,6 @@ const Index = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="role" className="text-sm font-medium">Role</Label>
-                  <Select onValueChange={(value) => setCredentials({...credentials, role: value})}>
-                    <SelectTrigger className="h-11">
-                      <SelectValue placeholder="Select your role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Administrator</SelectItem>
-                      <SelectItem value="agent">Support Agent</SelectItem>
-                      <SelectItem value="customer">Customer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 <Button type="submit" className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium">
                   <LogIn className="w-4 h-4 mr-2" />
                   Sign In
@@ -138,49 +225,50 @@ const Index = () => {
   }
 
   // Dashboard based on user role
+  const userRole = user?.user_metadata?.role;
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
+    <CurrentTicketProvider>
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
               <div className="flex items-center">
-                <Brain className="w-8 h-8 text-blue-600 mr-3" />
-                <h1 className="text-xl font-semibold text-gray-900">TicketScribe AI</h1>
+                <div className="flex items-center">
+                  <Brain className="w-8 h-8 text-blue-600 mr-3" />
+                  <h1 className="text-xl font-semibold text-gray-900">TicketScribe AI</h1>
+                </div>
+              </div>
+              <div className="flex items-center space-x-4">
+                <Badge variant="outline" className="capitalize">
+                  {userRole}
+                </Badge>
+                <Button 
+                  variant="outline" 
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                  }}
+                >
+                  Logout
+                </Button>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
-              <Badge variant="outline" className="capitalize">
-                {userRole}
-              </Badge>
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setIsLoggedIn(false);
-                  setUserRole(null);
-                  setCredentials({ email: '', password: '', role: '' });
-                }}
-              >
-                Logout
-              </Button>
-            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Dashboard Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {userRole === 'admin' && <AdminDashboard />}
-        {userRole === 'agent' && <AgentDashboard />}
-        {userRole === 'customer' && <CustomerDashboard />}
-      </main>
-    </div>
+        {/* Dashboard Content */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {userRole === 'admin' && <AdminDashboard tickets={tickets} setTickets={setTickets} />}
+          {userRole === 'agent' && <AgentDashboard tickets={tickets.filter(t => t.agent && (t.agent === user.email || t.agent === user.email?.split('@')[0]))} setTickets={setTickets} />}
+          {userRole === 'customer' && <CustomerDashboard tickets={tickets.filter(t => t.customer === user.email)} setTickets={setTickets} credentials={{ email: user.email, password: '' }} onlineAgent={onlineAgent} />}
+        </main>
+      </div>
+    </CurrentTicketProvider>
   );
 };
 
 // Enhanced Admin Dashboard Component
-const AdminDashboard = () => {
+const AdminDashboard = ({ tickets, setTickets }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'monitoring' | 'tickets'>('overview');
 
   const stats = [
@@ -307,49 +395,24 @@ const AdminDashboard = () => {
 
         {activeTab === 'analytics' && <AnalyticsDashboard />}
         {activeTab === 'monitoring' && <MLMonitoring />}
-        {activeTab === 'tickets' && <TicketManager />}
+        {activeTab === 'tickets' && <TicketManager tickets={tickets} setTickets={setTickets} />}
       </div>
     </div>
   );
 };
 
 // Agent Dashboard Component
-const AgentDashboard = () => {
+const AgentDashboard = ({ tickets, setTickets }) => {
   const [activeView, setActiveView] = useState<'queue' | 'analytics'>('queue');
-  
-  const tickets = [
-    { 
-      id: '#T-2024-001', 
-      subject: 'Login issues with mobile app', 
-      department: 'Technical', 
-      priority: 'High', 
-      status: 'Open',
-      confidence: 94.2,
-      created: '2 hours ago',
-      customer: 'john.doe@email.com'
-    },
-    { 
-      id: '#T-2024-002', 
-      subject: 'Billing question about subscription', 
-      department: 'Billing', 
-      priority: 'Medium', 
-      status: 'In Progress',
-      confidence: 96.8,
-      created: '1 hour ago',
-      customer: 'jane.smith@email.com'
-    },
-    { 
-      id: '#T-2024-003', 
-      subject: 'Feature request for dashboard', 
-      department: 'Product', 
-      priority: 'Low', 
-      status: 'Open',
-      confidence: 89.3,
-      created: '30 min ago',
-      customer: 'mike.johnson@company.com'
-    },
-  ];
+  const { currentTicket } = useCurrentTicket();
+  const [editTicket, setEditTicket] = useState<Ticket | null>(null);
+  const [editForm, setEditForm] = useState<Ticket | null>(null);
+  const [deleteTicket, setDeleteTicket] = useState<Ticket | null>(null);
 
+  React.useEffect(() => {
+    if (editTicket) setEditForm(editTicket);
+  }, [editTicket]);
+  
   const myStats = [
     { label: 'Assigned Tickets', value: '12', trend: 'up' },
     { label: 'Resolved Today', value: '8', trend: 'up' },
@@ -359,6 +422,11 @@ const AgentDashboard = () => {
 
   return (
     <div className="space-y-8">
+      {currentTicket && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded mb-4">
+          <strong>Current Ticket:</strong> {currentTicket.id} - {currentTicket.subject} ({currentTicket.status})
+        </div>
+      )}
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Agent Dashboard</h2>
         
@@ -441,12 +509,92 @@ const AgentDashboard = () => {
                           <Badge variant={ticket.status === 'Open' ? 'destructive' : 'default'}>
                             {ticket.status}
                           </Badge>
-                          <Button size="sm">View</Button>
+                          <Button size="sm" onClick={() => setEditTicket(ticket)}>Edit</Button>
+                          <Button size="sm" variant="destructive" onClick={() => setDeleteTicket(ticket)}>Delete</Button>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
+                {/* Edit Modal */}
+                <Dialog open={!!editTicket} onOpenChange={open => { if (!open) { setEditTicket(null); setEditForm(null); } }}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Edit Ticket</DialogTitle>
+                    </DialogHeader>
+                    {editForm && (
+                      <form onSubmit={async e => {
+                        e.preventDefault();
+                        try {
+                          await updateTicket(editForm.id, {
+                            status: editForm.status,
+                            priority: editForm.priority,
+                            agent: editForm.agent
+                          });
+                          setTickets(prev => prev.map(t => t.id === editForm.id ? { ...t, status: editForm.status, priority: editForm.priority, agent: editForm.agent } : t));
+                          setEditTicket(null);
+                          setEditForm(null);
+                        } catch (error: any) {
+                          toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                        }
+                      }} className="space-y-4">
+                        <div>
+                          <Label>Status</Label>
+                          <Select value={editForm.status} onValueChange={val => setEditForm({ ...editForm, status: val })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Open">Open</SelectItem>
+                              <SelectItem value="In Progress">In Progress</SelectItem>
+                              <SelectItem value="Resolved">Resolved</SelectItem>
+                              <SelectItem value="Closed">Closed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Priority</Label>
+                          <Select value={editForm.priority} onValueChange={val => setEditForm({ ...editForm, priority: val })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Critical">Critical</SelectItem>
+                              <SelectItem value="High">High</SelectItem>
+                              <SelectItem value="Medium">Medium</SelectItem>
+                              <SelectItem value="Low">Low</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Agent</Label>
+                          <Input value={editForm.agent || ''} onChange={e => setEditForm({ ...editForm, agent: e.target.value })} />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" variant="outline" onClick={() => { setEditTicket(null); setEditForm(null); }}>Cancel</Button>
+                          <Button type="submit">Save</Button>
+                        </div>
+                      </form>
+                    )}
+                  </DialogContent>
+                </Dialog>
+                {/* Delete Confirmation */}
+                <AlertDialog open={!!deleteTicket} onOpenChange={open => !open && setDeleteTicket(null)}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Ticket?</AlertDialogTitle>
+                    </AlertDialogHeader>
+                    <p>Are you sure you want to delete ticket {deleteTicket?.id}?</p>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => setDeleteTicket(null)}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={async () => {
+                        try {
+                          await deleteTicket(deleteTicket?.id!);
+                          setTickets(prev => prev.filter(t => t.id !== deleteTicket?.id));
+                          setDeleteTicket(null);
+                        } catch (error: any) {
+                          toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                        }
+                      }}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
             </Card>
           </>
@@ -510,11 +658,19 @@ const AgentDashboard = () => {
 };
 
 // Enhanced Customer Dashboard Component
-const CustomerDashboard = () => {
+const CustomerDashboard = ({ tickets, setTickets, credentials, onlineAgent }) => {
   const [newTicket, setNewTicket] = useState({ subject: '', description: '', priority: '' });
   const [predictedDepartment, setPredictedDepartment] = useState<string | null>(null);
   const [predictionConfidence, setPredictionConfidence] = useState<number | null>(null);
   const { toast } = useToast();
+  const { currentTicket } = useCurrentTicket();
+  const [editTicket, setEditTicket] = useState<Ticket | null>(null);
+  const [editForm, setEditForm] = useState<Ticket | null>(null);
+  const [deleteTicket, setDeleteTicket] = useState<Ticket | null>(null);
+
+  React.useEffect(() => {
+    if (editTicket) setEditForm(editTicket);
+  }, [editTicket]);
 
   const handleSubjectChange = (value: string) => {
     setNewTicket({ ...newTicket, subject: value });
@@ -542,16 +698,37 @@ const CustomerDashboard = () => {
     }
   };
 
-  const handleSubmitTicket = (e: React.FormEvent) => {
+  const handleSubmitTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newTicket.subject && newTicket.description) {
-      toast({
-        title: "Ticket Submitted Successfully",
-        description: `Your ticket will be automatically routed to ${predictedDepartment || 'the appropriate department'} with ${predictionConfidence?.toFixed(1) || 'high'}% confidence.`,
-      });
-      setNewTicket({ subject: '', description: '', priority: '' });
-      setPredictedDepartment(null);
-      setPredictionConfidence(null);
+      // Create a new ticket object
+      const newId = `T-2024-${Date.now()}`;
+      const ticket = {
+        id: newId,
+        subject: newTicket.subject,
+        department: predictedDepartment || 'General',
+        priority: (newTicket.priority || 'Low').charAt(0).toUpperCase() + (newTicket.priority || 'Low').slice(1),
+        status: 'Open',
+        created: new Date().toLocaleString(),
+        customer: credentials.email || 'customer@email.com',
+        confidence: predictionConfidence || 90,
+        isAutoClassified: true,
+        agent: onlineAgent || '',
+        description: newTicket.description,
+      };
+      try {
+        await createTicket(ticket);
+        setTickets(prev => [ticket, ...prev]);
+        toast({
+          title: "Ticket Submitted Successfully",
+          description: `Your ticket will be automatically routed to ${predictedDepartment || 'the appropriate department'} with ${predictionConfidence?.toFixed(1) || 'high'}% confidence.`,
+        });
+        setNewTicket({ subject: '', description: '', priority: '' });
+        setPredictedDepartment(null);
+        setPredictionConfidence(null);
+      } catch (error: any) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      }
     }
   };
 
@@ -578,6 +755,11 @@ const CustomerDashboard = () => {
 
   return (
     <div className="space-y-8">
+      {currentTicket && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded mb-4">
+          <strong>Current Ticket:</strong> {currentTicket.id} - {currentTicket.subject} ({currentTicket.status})
+        </div>
+      )}
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Customer Portal</h2>
         
@@ -650,31 +832,108 @@ const CustomerDashboard = () => {
             <CardDescription>Track your tickets and see how AI has classified them</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {myTickets.map((ticket, index) => (
-                <div key={index} className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <span className="font-medium">{ticket.id}</span>
-                        <Badge variant="outline">{ticket.department}</Badge>
-                        <div className="flex items-center gap-1">
-                          <Brain className="w-3 h-3 text-blue-600" />
-                          <span className="text-xs text-gray-500">{ticket.confidence}% AI confidence</span>
+            {tickets.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">No tickets found.</div>
+            ) : (
+              <div className="space-y-4">
+                {tickets.map((ticket, index) => (
+                  <div key={index} className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-2">
+                          <span className="font-medium">{ticket.id}</span>
+                          <Badge variant="outline">{ticket.department}</Badge>
+                          <div className="flex items-center gap-1">
+                            <Brain className="w-3 h-3 text-blue-600" />
+                            <span className="text-xs text-gray-500">{ticket.confidence}% AI confidence</span>
+                          </div>
                         </div>
+                        <p className="text-gray-900 font-medium mb-1">{ticket.subject}</p>
+                        <p className="text-sm text-gray-600">
+                          Agent: {ticket.agent} • Created: {ticket.created}
+                        </p>
                       </div>
-                      <p className="text-gray-900 font-medium mb-1">{ticket.subject}</p>
-                      <p className="text-sm text-gray-600">
-                        Agent: {ticket.agent} • Created: {ticket.created}
-                      </p>
+                      <Badge className={ticket.status === 'Resolved' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}>
+                        {ticket.status}
+                      </Badge>
+                      <Button size="sm" onClick={() => setEditTicket(ticket)} disabled={ticket.status === 'Closed'}>Edit</Button>
+                      <Button size="sm" variant="destructive" onClick={() => setDeleteTicket(ticket)}>Delete</Button>
                     </div>
-                    <Badge className={ticket.status === 'Resolved' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}>
-                      {ticket.status}
-                    </Badge>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
+            {/* Edit Modal */}
+            <Dialog open={!!editTicket} onOpenChange={open => { if (!open) { setEditTicket(null); setEditForm(null); } }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit Ticket</DialogTitle>
+                </DialogHeader>
+                {editForm && (
+                  <form onSubmit={async e => {
+                  e.preventDefault();
+                  try {
+                  await updateTicket(editForm.id, {
+                  subject: editForm.subject,
+                  description: editForm.description,
+                  priority: editForm.priority
+                  });
+                  setTickets(prev => prev.map(t => t.id === editForm.id ? { ...t, subject: editForm.subject, description: editForm.description, priority: editForm.priority } : t));
+                  setEditTicket(null);
+                  setEditForm(null);
+                  } catch (error: any) {
+                  toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                  }
+                  }} className="space-y-4">
+                    <div>
+                      <Label>Subject</Label>
+                      <Input value={editForm.subject} onChange={e => setEditForm({ ...editForm, subject: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Description</Label>
+                      <Input value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>Priority</Label>
+                      <Select value={editForm.priority} onValueChange={val => setEditForm({ ...editForm, priority: val })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Critical">Critical</SelectItem>
+                          <SelectItem value="High">High</SelectItem>
+                          <SelectItem value="Medium">Medium</SelectItem>
+                          <SelectItem value="Low">Low</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" onClick={() => { setEditTicket(null); setEditForm(null); }}>Cancel</Button>
+                      <Button type="submit">Save</Button>
+                    </div>
+                  </form>
+                )}
+              </DialogContent>
+            </Dialog>
+            {/* Delete Confirmation */}
+            <AlertDialog open={!!deleteTicket} onOpenChange={open => !open && setDeleteTicket(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Ticket?</AlertDialogTitle>
+                </AlertDialogHeader>
+                <p>Are you sure you want to delete ticket {deleteTicket?.id}?</p>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setDeleteTicket(null)}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={async () => {
+                    try {
+                      await deleteTicket(deleteTicket?.id!);
+                      setTickets(prev => prev.filter(t => t.id !== deleteTicket?.id));
+                      setDeleteTicket(null);
+                    } catch (error: any) {
+                      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                    }
+                  }}>Delete</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </CardContent>
         </Card>
       </div>

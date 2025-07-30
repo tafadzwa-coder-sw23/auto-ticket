@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { Brain, Activity, AlertTriangle, CheckCircle, Zap, RefreshCw } from "lucide-react";
+import { useCurrentTicket } from "../lib/CurrentTicketContext";
 
 interface ModelMetrics {
   accuracy: number;
@@ -26,6 +27,7 @@ interface RealtimeData {
 }
 
 const MLMonitoring = () => {
+  const { currentTicket } = useCurrentTicket();
   const [modelMetrics, setModelMetrics] = useState<ModelMetrics>({
     accuracy: 94.7,
     precision: 92.3,
@@ -97,6 +99,11 @@ const MLMonitoring = () => {
 
   return (
     <div className="space-y-6">
+      {currentTicket && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded mb-4">
+          <strong>Current Ticket:</strong> {currentTicket.id} - {currentTicket.subject} ({currentTicket.status})
+        </div>
+      )}
       {/* Model Status Header */}
       <Card>
         <CardHeader>

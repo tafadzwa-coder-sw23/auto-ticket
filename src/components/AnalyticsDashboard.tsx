@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { TrendingUp, TrendingDown, Users, Clock, Target, Brain } from "lucide-react";
+import { useCurrentTicket } from "../lib/CurrentTicketContext";
 
 const ticketVolumeData = [
   { month: 'Jan', tickets: 245, resolved: 220 },
@@ -33,8 +34,14 @@ const classificationAccuracy = [
 ];
 
 const AnalyticsDashboard = () => {
+  const { currentTicket } = useCurrentTicket();
   return (
     <div className="space-y-6">
+      {currentTicket && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded mb-4">
+          <strong>Current Ticket:</strong> {currentTicket.id} - {currentTicket.subject} ({currentTicket.status})
+        </div>
+      )}
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="hover:shadow-lg transition-shadow">
