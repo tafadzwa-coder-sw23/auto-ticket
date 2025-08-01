@@ -71,6 +71,12 @@ const Index = () => {
     if (userRole === 'agent' && user?.email) {
       setOnlineAgent(user.email);
       setTickets(prev => prev.map(t => !t.agent ? { ...t, agent: user.email } : t));
+      // Persist assignment in Supabase
+      tickets.forEach(t => {
+        if (!t.agent) {
+          updateTicket(t.id, { agent: user.email });
+        }
+      });
     }
   }, [user]);
 
@@ -271,11 +277,10 @@ const Index = () => {
 const AdminDashboard = ({ tickets, setTickets }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'monitoring' | 'tickets'>('overview');
 
+  // Stats will be calculated from real ticket data below
   const stats = [
-    { title: 'Total Tickets', value: '2,847', change: '+12%', icon: Ticket },
-    { title: 'ML Accuracy', value: '94.7%', change: '+2.1%', icon: Brain },
-    { title: 'Avg Resolution Time', value: '4.2h', change: '-8%', icon: BarChart3 },
-    { title: 'Auto-Classified', value: '89.3%', change: '+5%', icon: Zap },
+    { title: 'Total Tickets', value: tickets.length, icon: Ticket },
+    // You can add more stats here if you have real data for them
   ];
 
   return (
@@ -413,12 +418,8 @@ const AgentDashboard = ({ tickets, setTickets }) => {
     if (editTicket) setEditForm(editTicket);
   }, [editTicket]);
   
-  const myStats = [
-    { label: 'Assigned Tickets', value: '12', trend: 'up' },
-    { label: 'Resolved Today', value: '8', trend: 'up' },
-    { label: 'Avg Resolution', value: '3.2h', trend: 'down' },
-    { label: 'Customer Rating', value: '4.8', trend: 'up' },
-  ];
+  // Remove dummy agent stats; you can calculate real stats from tickets if needed
+  const myStats = [];
 
   return (
     <div className="space-y-8">
@@ -672,46 +673,60 @@ const CustomerDashboard = ({ tickets, setTickets, credentials, onlineAgent }) =>
     if (editTicket) setEditForm(editTicket);
   }, [editTicket]);
 
-  const handleSubjectChange = (value: string) => {
+  // Use backend ML for prediction
+  const handleSubjectChange = async (value: string) => {
     setNewTicket({ ...newTicket, subject: value });
-    
-    // Simulate AI prediction based on subject
-    if (value.length > 10) {
-      setTimeout(() => {
-        if (value.toLowerCase().includes('login') || value.toLowerCase().includes('bug') || value.toLowerCase().includes('error')) {
-          setPredictedDepartment('Technical Support');
-          setPredictionConfidence(94.2);
-        } else if (value.toLowerCase().includes('billing') || value.toLowerCase().includes('payment') || value.toLowerCase().includes('charge')) {
-          setPredictedDepartment('Billing');
-          setPredictionConfidence(96.8);
-        } else if (value.toLowerCase().includes('demo') || value.toLowerCase().includes('sales') || value.toLowerCase().includes('pricing')) {
-          setPredictedDepartment('Sales');
-          setPredictionConfidence(91.3);
-        } else {
-          setPredictedDepartment('General Support');
-          setPredictionConfidence(87.5);
-        }
-      }, 500);
-    } else {
-      setPredictedDepartment(null);
-      setPredictionConfidence(null);
+    setPredictedDepartment(null);
+    setPredictionConfidence(null);
+    if (value.length > 10 && newTicket.description.length > 10) {
+      try {
+        const response = await fetch("http://localhost:8000/classify_ticket", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subject: value, description: newTicket.description })
+        });
+        if (!response.ok) throw new Error("Failed to classify ticket");
+        const data = await response.json();
+        setPredictedDepartment(data.department);
+        setPredictionConfidence(data.confidence * 100);
+      } catch (err) {
+        setPredictedDepartment(null);
+        setPredictionConfidence(null);
+      }
     }
   };
 
   const handleSubmitTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newTicket.subject && newTicket.description) {
+      // Call backend ML API for classification
+      let department = 'General';
+      let confidence = 90;
+      try {
+        const response = await fetch("http://localhost:8000/classify_ticket", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subject: newTicket.subject, description: newTicket.description })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          department = data.department;
+          confidence = data.confidence * 100;
+        }
+      } catch (err) {
+        // fallback to default
+      }
       // Create a new ticket object
       const newId = `T-2024-${Date.now()}`;
       const ticket = {
         id: newId,
         subject: newTicket.subject,
-        department: predictedDepartment || 'General',
+        department,
         priority: (newTicket.priority || 'Low').charAt(0).toUpperCase() + (newTicket.priority || 'Low').slice(1),
         status: 'Open',
         created: new Date().toLocaleString(),
         customer: credentials.email || 'customer@email.com',
-        confidence: predictionConfidence || 90,
+        confidence,
         isAutoClassified: true,
         agent: onlineAgent || '',
         description: newTicket.description,
@@ -721,7 +736,7 @@ const CustomerDashboard = ({ tickets, setTickets, credentials, onlineAgent }) =>
         setTickets(prev => [ticket, ...prev]);
         toast({
           title: "Ticket Submitted Successfully",
-          description: `Your ticket will be automatically routed to ${predictedDepartment || 'the appropriate department'} with ${predictionConfidence?.toFixed(1) || 'high'}% confidence.`,
+          description: `Your ticket will be automatically routed to ${department} with ${confidence.toFixed(1)}% confidence.`,
         });
         setNewTicket({ subject: '', description: '', priority: '' });
         setPredictedDepartment(null);
@@ -732,26 +747,8 @@ const CustomerDashboard = ({ tickets, setTickets, credentials, onlineAgent }) =>
     }
   };
 
-  const myTickets = [
-    {
-      id: '#T-2024-005',
-      subject: 'Unable to access dashboard',
-      department: 'Technical',
-      status: 'In Progress',
-      created: '2 hours ago',
-      confidence: 95.3,
-      agent: 'Alex Chen'
-    },
-    {
-      id: '#T-2024-004',
-      subject: 'Subscription renewal question',
-      department: 'Billing',
-      status: 'Resolved',
-      created: '1 day ago',
-      confidence: 97.1,
-      agent: 'Sarah Wilson'
-    },
-  ];
+  // Remove dummy myTickets; use only tickets from the database
+  const myTickets = [];
 
   return (
     <div className="space-y-8">

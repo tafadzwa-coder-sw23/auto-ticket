@@ -37,6 +37,15 @@ class SignupResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+# --- ML Classification Models ---
+class TicketClassifyRequest(BaseModel):
+    subject: str
+    description: str
+
+class TicketClassifyResponse(BaseModel):
+    department: str
+    confidence: float  # 0-1
+
 # --- Utility functions ---
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -97,3 +106,38 @@ async def signup(user: UserSignup):
         access_token=access_token,
         token_type="bearer"
     )
+
+# --- ML Ticket Classification Endpoint ---
+@app.post("/classify_ticket", response_model=TicketClassifyResponse)
+def classify_ticket(req: TicketClassifyRequest):
+    """
+    Classify a ticket using a scoring system based on keyword matches.
+    """
+    text = (req.subject + " " + req.description).lower()
+    department_keywords = {
+        "Technical Support": ["login", "bug", "error", "issue", "crash", "system", "api", "fail", "problem", "reset", "password", "technical", "support", "access", "unable", "not working", "glitch", "slow", "performance", "timeout", "server", "database"],
+        "Billing": ["billing", "payment", "charge", "invoice", "refund", "credit", "debit", "card", "subscription", "plan", "renew", "cancel", "overcharge", "price", "cost", "fee", "transaction", "receipt", "account", "statement"],
+        "Sales": ["demo", "sales", "pricing", "quote", "purchase", "buy", "trial", "upgrade", "offer", "discount", "order", "product", "feature", "request", "information", "plan", "package", "deal", "contact", "salesperson"],
+        "General Support": ["question", "help", "general", "info", "information", "how", "what", "where", "when", "why", "assist", "support", "customer", "service", "feedback", "suggestion", "other"]
+    }
+    # Tokenize text for robust matching
+    import re
+    words_in_text = set(re.findall(r"\b\w+\b", text))
+    scores = {dept: 0 for dept in department_keywords}
+    for dept, keywords in department_keywords.items():
+        for word in keywords:
+            # Only exact token match
+            if word in words_in_text:
+                scores[dept] += 1
+    # Debug: print scores for each department
+    print(f"[ML DEBUG] words_in_text={words_in_text}")
+    print(f"[ML DEBUG] scores={scores}")
+    # Pick department with highest score
+    best_dept = max(scores, key=lambda k: scores[k])
+    best_score = scores[best_dept]
+    total_keywords = sum(scores.values())
+    # Confidence: if no matches, set low confidence
+    if best_score == 0:
+        return TicketClassifyResponse(department="General Support", confidence=0.5)
+    confidence = min(0.99, 0.7 + 0.3 * (best_score / (total_keywords or 1)))
+    return TicketClassifyResponse(department=best_dept, confidence=confidence)

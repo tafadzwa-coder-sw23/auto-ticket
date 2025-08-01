@@ -33,11 +33,13 @@ const SignUp = () => {
     setSuccess("");
     setLoading(true);
     try {
+      // Map 'support' to 'agent' for role consistency
+      const mappedRole = values.role === 'support' ? 'agent' : values.role;
       const { error: signUpError } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
         options: {
-          data: { role: values.role },
+          data: { role: mappedRole },
         },
       });
       if (signUpError) {
