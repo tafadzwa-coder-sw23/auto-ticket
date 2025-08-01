@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Users, BarChart3, Zap, ShieldCheck, Facebook, Twitter, Linkedin, Mail } from "lucide-react";
 
 const Landing = () => {
@@ -9,24 +10,24 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="text-2xl font-extrabold text-blue-700">TicketScribe AI</div>
           <div className="hidden md:flex space-x-8 text-gray-700 font-semibold">
-            <a href="/" className="hover:text-blue-600 transition">Home</a>
+            <Link to="/" className="hover:text-blue-600 transition">Home</Link>
             <a href="#features" className="hover:text-blue-600 transition">Features</a>
             <a href="#testimonials" className="hover:text-blue-600 transition">Testimonials</a>
             <a href="#contact" className="hover:text-blue-600 transition">Contact</a>
           </div>
           <div className="space-x-4">
-            <a
-              href="/signin"
+            <Link
+              to="/signin"
               className="inline-block px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg shadow-md hover:from-blue-700 hover:to-indigo-700 transition"
             >
               Sign In
-            </a>
-            <a
-              href="/signup"
+            </Link>
+            <Link
+              to="/signup"
               className="inline-block px-6 py-2 border border-blue-600 text-blue-600 font-semibold rounded-lg shadow-md hover:bg-blue-50 transition"
             >
               Sign Up
-            </a>
+            </Link>
           </div>
         </div>
       </nav>
@@ -97,7 +98,7 @@ const Landing = () => {
           <div>
             <h3 className="font-semibold text-lg mb-4">Quick Links</h3>
             <ul className="space-y-2 text-sm">
-              <li><a href="/" className="hover:text-blue-600 transition">Home</a></li>
+              <li><Link to="/" className="hover:text-blue-600 transition">Home</Link></li>
               <li><a href="#features" className="hover:text-blue-600 transition">Features</a></li>
               <li><a href="#testimonials" className="hover:text-blue-600 transition">Testimonials</a></li>
               <li><a href="#contact" className="hover:text-blue-600 transition">Contact</a></li>
