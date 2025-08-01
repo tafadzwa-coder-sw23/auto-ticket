@@ -79,7 +79,7 @@ const Landing = () => {
         <section id="testimonials" className="bg-white rounded-xl shadow-lg p-12 max-w-4xl mx-auto text-center">
           <h2 className="text-4xl font-semibold mb-8">What Our Clients Say</h2>
           <blockquote className="italic text-gray-700">
-            "TicketScribe AI transformed our support process. The AI classification is incredibly accurate and saves us hours every day."
+            "TicketScribe AI transformed our support process. The AI classification is incredibly accurate and saves us hours every day of business ."
           </blockquote>
           <cite className="block mt-4 font-semibold text-gray-900">- Jane Doe, Support Manager</cite>
         </section>
